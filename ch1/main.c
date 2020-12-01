@@ -6,32 +6,67 @@ void die(char *str) {
     exit(-1);
 }
 
+// accending order
+void my_qsort(int *a, size_t len) {
+    switch (len) {
+        case 2:
+            if (a[0] > a[1]) {
+                int tmp = a[0];
+                a[0] = a[1];
+                a[1] = tmp;
+            }
+        case 0:
+        case 1:
+            return;
+        default:;
+            int mid = a[0];
+            size_t nxt = 1;
+            for (size_t i = 1; i < len; i++) {
+                if (a[i] <= mid) {
+                    int tmp = a[nxt];
+                    a[nxt] = a[i];
+                    a[i] = tmp;
+                    nxt++;
+                }
+            }
+            int tmp = a[0];
+            a[0] = a[nxt-1];
+            a[nxt-1] = tmp;
+            my_qsort(a, nxt-1);
+            my_qsort(a+nxt, len-nxt);
+    }
+}
+
+int check_for(int *a, size_t len, int val) {
+    if (len == 0) return 0;
+    else if (a[len/2] == val) return 1;
+    else if (a[len/2] < val) return check_for(a + len/2 + 1, (len-1)/2, val);
+    else return check_for(a, len/2, val);
+}
+
 #define MAX_DATA 4096
 
 int data_store[MAX_DATA];
 size_t data_pos = 0;
 
 void part_one() {
+    my_qsort(data_store, data_pos);
     for (size_t i = 0; i < data_pos; i++) {
-        for (size_t j = 0; j < i; j++) {
-            if ((data_store[i] + data_store[j]) == 2020) {
-                printf("P1: %d\n", data_store[i] * data_store[j]);
-                return;
-            }
+        int r = 2020 - data_store[i];
+        if (check_for(data_store+i, data_pos-i, r)) {
+            printf("P1: %d\n", data_store[i] * r);
         }
     }
 }
 
 void part_two() {
-    for (size_t i = 0; i < data_pos; i++) {
-        for (size_t j = i + 1; j < data_pos; j++) {
-            int im = data_store[i] + data_store[j];
-            if (im > 2020) continue;
-            for (size_t k = j + 1; k < data_pos; k++) {
-                if ((im + data_store[k]) == 2020) {
-                    printf("P2: %d\n", data_store[i] * data_store[j] * data_store[k]);
-                    return;
-                }
+    my_qsort(data_store, data_pos);
+    for (size_t i = 0; (i < data_pos) && (data_store[i] <= (2020/3)); i++) {
+        int r = 2020 - data_store[i];
+        for (size_t j = i + 1; (j < data_pos) && (data_store[j] <= (r/2)); j++) {
+            int rr = r - data_store[j];
+            if (check_for(data_store+j+1, data_pos-j-1, rr)) {
+                printf("P2: %d\n", data_store[i] * data_store[j] * rr);
             }
         }
     }
