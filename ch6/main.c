@@ -15,15 +15,20 @@ int main(int argc, char **argv) {
     int max = -1;
     unsigned char found[1024];
     memset(found, 0, 1024);
-    while (fgets(data, 16, fd) != NULL) {
-        int sid = 0;
-        for (int i = 0; i < 10; i++) {
-            sid <<= 1;
-            sid |= ((data[i] >> 2) & 1);
+    while (fscanf(fd, " %[FBLR] ", data) > 0) {
+        int row = 0;
+        for (int i = 0; i < 7; i++) {
+            row <<= 1;
+            row |= (data[i] == 'B');
         }
-        sid ^= 1023;
-        if (sid > max) max = sid;
-        found[sid] = 1;
+        int col = 0;
+        for (int i = 7; i < 10; i++) {
+            col <<= 1;
+            col |= (data[i] == 'R');
+        }
+        int v = row * 8 + col;
+        if (v > max) max = v;
+        found[v] = 1;
     }
     printf("P1: %d\n", max);
     int i = 0;
