@@ -28,27 +28,40 @@ FILE *map_file(const char *filename) {
     return fmemopen(data, fd_stat.st_size, "r");
 }
 
-#define SEAT_CNT 1024
-
 int main(int argc, char **argv) {
     // read input
     FILE *fd = map_file("test.txt");
-    char data[16];
-    int min = SEAT_CNT;
-    int max = -1;
-    long acc = 0;
-    while (fgets(data, 16, fd) != NULL) {
-        int sid = 0;
-        for (int i = 0; i < 10; i++) {
-            sid <<= 1;
-            sid |= ((data[i] >> 2) & 1);
+    char data[64];
+    unsigned char bins_any[26];
+    unsigned char bins_all[26];
+    memset(bins_any, 0, 26);
+    memset(bins_all, 1, 26);
+    int any_acc = 0;
+    int all_acc = 0;
+    while (fgets(data, 64, fd) != NULL) {
+        if (data[0] < 'a') {
+            for (int i = 0; i < 26; i++) {
+                any_acc += bins_any[i];
+                all_acc += bins_all[i];
+            }
+            memset(bins_any, 0, 26);
+            memset(bins_all, 1, 26);
+        } else {
+            unsigned char min_bins[26];
+            memset(min_bins, 0, 26);
+            for (int i = 0; data[i] >= 'a'; i++) {
+                bins_any[data[i] - 'a'] = min_bins[data[i] - 'a'] = 1;
+            }
+            for (int i = 0; i < 26; i++) {
+                bins_all[i] &= min_bins[i];
+            }
         }
-        sid ^= SEAT_CNT - 1;
-        if (sid > max) max = sid;
-        if (sid < min) min = sid;
-        acc += sid;
     }
-    printf("P1: %d\n", max);
-    printf("P2: %d\n", (int) (((max - min + 1) * (min + max) / 2) - acc));
+    for (int i = 0; i < 26; i++) {
+        any_acc += bins_any[i];
+        all_acc += bins_all[i];
+    }
+    printf("P1: %d\n", any_acc);
+    printf("P2: %d\n", all_acc);
     return 0;
 }
