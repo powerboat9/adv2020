@@ -7,28 +7,28 @@ void die(char *str) {
     exit(-1);
 }
 
+#define SEAT_CNT 1024
+
 int main(int argc, char **argv) {
     // read input
     FILE *fd = fopen("test.txt", "r");
     if (fd == NULL) die("failed to read");
     char data[16];
+    int min = SEAT_CNT;
     int max = -1;
-    unsigned char found[1024];
-    memset(found, 0, 1024);
+    long acc = 0;
     while (fgets(data, 16, fd) != NULL) {
         int sid = 0;
         for (int i = 0; i < 10; i++) {
             sid <<= 1;
             sid |= ((data[i] >> 2) & 1);
         }
-        sid ^= 1023;
+        sid ^= SEAT_CNT - 1;
         if (sid > max) max = sid;
-        found[sid] = 1;
+        if (sid < min) min = sid;
+        acc += sid;
     }
     printf("P1: %d\n", max);
-    int i = 0;
-    while (!found[i]) i++;
-    while (found[i]) i++;
-    printf("P2: %d\n", i);
+    printf("P2: %d\n", (int) (((max - min + 1) * (min + max) / 2) - acc));
     return 0;
 }
