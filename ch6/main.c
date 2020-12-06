@@ -1,39 +1,54 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 void die(char *str) {
     fprintf(stderr, "[ERROR] %s\n", str);
     exit(-1);
 }
 
+FILE *map_file(const char *filename) {
+    int fd;
+    if ((fd = open(filename, O_RDONLY)) == -1) die("failed to open file");
+    struct stat fd_stat;
+    if (fstat(fd, &fd_stat) == -1) die("failed to stat file");
+    void *data;
+    // never unmapped, probably fine
+    if ((data = mmap(NULL,
+                     fd_stat.st_size,
+                     PROT_READ,
+                     MAP_PRIVATE,
+                     fd, 0)) == MAP_FAILED) die("failed to map file");
+    close(fd);
+    return fmemopen(data, fd_stat.st_size, "r");
+}
+
+#define SEAT_CNT 1024
+
 int main(int argc, char **argv) {
     // read input
-    FILE *fd = fopen("test.txt", "r");
-    if (fd == NULL) die("failed to read");
+    FILE *fd = map_file("test.txt");
     char data[16];
+    int min = SEAT_CNT;
     int max = -1;
-    unsigned char found[1024];
-    memset(found, 0, 1024);
-    while (fscanf(fd, " %[FBLR] ", data) > 0) {
-        int row = 0;
-        for (int i = 0; i < 7; i++) {
-            row <<= 1;
-            row |= (data[i] == 'B');
+    long acc = 0;
+    while (fgets(data, 16, fd) != NULL) {
+        int sid = 0;
+        for (int i = 0; i < 10; i++) {
+            sid <<= 1;
+            sid |= ((data[i] >> 2) & 1);
         }
-        int col = 0;
-        for (int i = 7; i < 10; i++) {
-            col <<= 1;
-            col |= (data[i] == 'R');
-        }
-        int v = row * 8 + col;
-        if (v > max) max = v;
-        found[v] = 1;
+        sid ^= SEAT_CNT - 1;
+        if (sid > max) max = sid;
+        if (sid < min) min = sid;
+        acc += sid;
     }
     printf("P1: %d\n", max);
-    int i = 0;
-    while (!found[i]) i++;
-    while (found[i]) i++;
-    printf("P2: %d\n", i);
+    printf("P2: %d\n", (int) (((max - min + 1) * (min + max) / 2) - acc));
     return 0;
 }
