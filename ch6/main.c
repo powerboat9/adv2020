@@ -32,35 +32,27 @@ int main(int argc, char **argv) {
     // read input
     FILE *fd = map_file("test.txt");
     char data[64];
-    unsigned char bins_any[26];
-    unsigned char bins_all[26];
-    memset(bins_any, 0, 26);
-    memset(bins_all, 1, 26);
     int any_acc = 0;
     int all_acc = 0;
+    unsigned int cur_any = 0;
+    unsigned int cur_all = ~0;
     while (fgets(data, 64, fd) != NULL) {
         if (data[0] < 'a') {
-            for (int i = 0; i < 26; i++) {
-                any_acc += bins_any[i];
-                all_acc += bins_all[i];
-            }
-            memset(bins_any, 0, 26);
-            memset(bins_all, 1, 26);
+            any_acc += __builtin_popcount(cur_any);
+            all_acc += __builtin_popcount(cur_all);
+            cur_any = 0;
+            cur_all = ~0;
         } else {
-            unsigned char min_bins[26];
-            memset(min_bins, 0, 26);
+            unsigned int row = 0;
             for (int i = 0; data[i] >= 'a'; i++) {
-                bins_any[data[i] - 'a'] = min_bins[data[i] - 'a'] = 1;
+                row |= 1 << (data[i] - 'a');
             }
-            for (int i = 0; i < 26; i++) {
-                bins_all[i] &= min_bins[i];
-            }
+            cur_any |= row;
+            cur_all &= row;
         }
     }
-    for (int i = 0; i < 26; i++) {
-        any_acc += bins_any[i];
-        all_acc += bins_all[i];
-    }
+    any_acc += __builtin_popcount(cur_any);
+    all_acc += __builtin_popcount(cur_all);
     printf("P1: %d\n", any_acc);
     printf("P2: %d\n", all_acc);
     return 0;
