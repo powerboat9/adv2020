@@ -5,7 +5,6 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <complex.h>
 #include <stdint.h>
 #include <inttypes.h>
 
@@ -43,20 +42,6 @@ struct node {
 
 typedef unsigned __int128 u128_t;
 
-void prt_addr(uint64_t a) {
-    for (int i = 0; i < 36; i++) {
-        int addr_part = (a >> (35 - i)) & 1;
-        putchar(("01")[addr_part]);
-    }
-}
-
-void prt_mi(u128_t n) {
-    for (int i = 0; i < 36; i++) {
-        int msk_part = (n >> (70 - i * 2)) & 3;
-        putchar(("01X#")[msk_part]);
-    }
-}
-
 u128_t make_idx(u128_t mask, uint64_t addr) {
     u128_t ret = 0;
     for (int i = 0; i < 36; i++) {
@@ -77,11 +62,6 @@ struct node *create_node() {
 struct node *clone_node(struct node *n, int depth);
 
 void insert(u128_t idx, struct node *n, uint64_t val, int depth) {
-    if (depth == 36) {
-        printf("INS: ");
-        prt_mi(idx);
-        printf("\nVAL: %lu\n", val);
-    }
     if (depth) {
         int idx_part = (idx >> (depth * 2 - 2)) & 3;
         switch (idx_part) {
