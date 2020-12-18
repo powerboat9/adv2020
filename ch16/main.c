@@ -38,12 +38,15 @@ int starts_with(char *s, char *prefix) {
 #define TICKET_ARGS 20
 #define OTH_TICK_MAX 4096
 
+#define COL_FIELD_DEF ((1 << TICKET_ARGS) - 1)
+
 struct ticket_type {
     char name[MAX_TYPE_NAME];
     unsigned int r1s;
     unsigned int r1l;
     unsigned int r2s;
     unsigned int r2l;
+    unsigned int col_field;
 };
 
 struct ticket_type ttypes[MAX_TYPES];
@@ -85,6 +88,31 @@ int read_until(char *start, FILE *fd) {
     else return 1;
 }
 
+unsigned int p2_acc = 1;
+int check_idx(int ok_map, int idx) {
+    for (unsigned int tr = 0; tr < TICKET_ARGS; tr++) {
+        for (int i = 0; i < (idx + 1); i++) putchar('>');
+        printf(" %d\n", tr);
+        if (!(ttypes[idx].col_field & ok_map & (1 << tr))) continue;
+        if ((idx + 1) != type_cnt) {
+            if (!check_idx(ok_map & ~(1 << tr), idx + 1)) continue;
+        }
+        // it works
+        if (starts_with(ttypes[idx].name, "departure")) {
+            printf("> %s\n", ttypes[idx].name);
+            printf("(%u) => ", p2_acc);
+            p2_acc *= my_ticket.vals[tr];
+            printf("(%u)\n", p2_acc);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+int does_fit(int n, struct ticket_type *tkt) {
+    return ((tkt->r1s <= n) && (tkt->r1l >= n)) || ((tkt->r2s <= n) && (tkt->r2l >= n));
+}
+
 int main(int argc, char **argv) {
     // read input
     FILE *fd = map_file("test.txt");
@@ -104,26 +132,92 @@ int main(int argc, char **argv) {
                &ttypes[type_cnt].r1l,
                &ttypes[type_cnt].r2s,
                &ttypes[type_cnt].r2l);
+        ttypes[type_cnt].col_field = COL_FIELD_DEF;
         type_cnt++;
     }
     // handle "your ticket"
     read_ticket(&my_ticket, fd);
     read_line(fd);
     // handle "nearby tickets"
+    // also p1
     read_line(fd);
-    while (read_ticket(&other_tickets[tick_cnt], fd)) tick_cnt++;
-    // p1
     int p1_acc = 0;
-    for (int i = 0; i < tick_cnt; i++) {
-        for (int j = 0; j < TICKET_ARGS; j++) {
-            int v = other_tickets[i].vals[j];
-            for (int k = 0; k < type_cnt; k++) {
-                if (((ttypes[k].r1s <= v) && (ttypes[k].r1l >= v)) || ((ttypes[k].r2s <= v) && (ttypes[k].r2l >= v))) goto p1_ok;
+    while (read_ticket(&other_tickets[tick_cnt], fd)) {
+        int ok = 1;
+        for (int i = 0; i < TICKET_ARGS; i++) {
+            int v = other_tickets[tick_cnt].vals[i];
+            for (int j = 0; j < type_cnt; j++) {
+                if (does_fit(v, &ttypes[j])) goto p1_ok;
             }
             p1_acc += v;
-            p1_ok: continue;;
+            ok = 0;
+            continue;
+            p1_ok: continue;
         }
+        if (ok) tick_cnt++;
     }
     printf("P1: %u\n", p1_acc);
+    // p2
+    for (int tk = 0; tk < tick_cnt; tk++) {
+        for (int idx = 0; idx < TICKET_ARGS; idx++) {
+            unsigned int v = other_tickets[tk].vals[idx];
+            for (int ty = 0; ty < type_cnt; ty++) {
+                if (!does_fit(v, &ttypes[ty])) {
+                    ttypes[ty].col_field &= ~(1L << idx);
+                }
+            }
+        }
+    }
+    // efficiency
+    int chng;
+    do {
+        chng = 0;
+        for (int ty = 0; ty < type_cnt; ty++) {
+            unsigned int slf = ttypes[ty].col_field;
+            unsigned int oth = 0;
+            for (int ty2 = 0; ty2 < type_cnt; ty2++) {
+                if (ty == ty2) continue;
+                oth |= ttypes[ty2].col_field;
+            }
+            unsigned int only = slf & ~oth;
+            if (only && (only != slf)) {
+                ttypes[ty].col_field = only;
+                chng = 1;
+            }
+        }
+    } while (chng);
+    // internal data display
+    for (int ty = 0; ty < type_cnt; ty++) {
+        printf("(%02d):", ty);
+        unsigned int tmp = ttypes[ty].col_field;
+        for (int i = 0; i < 32; i++) {
+            putchar(' ');
+            putchar((tmp & 1) ? '1' : '0');
+            tmp >>= 1;
+        }
+        putchar('\n');
+    }
+    // attempt to solve simple way
+    int p2aac = 1;
+    for (int ty = 0; ty < type_cnt; ty++) {
+        printf("$$ %s: %d\n", ttypes[ty].name, (int) __builtin_ctz(ttypes[ty].col_field));
+        if (!starts_with(ttypes[ty].name, "departure")) continue;
+        int si = ttypes[ty].col_field;
+        printf("> si: %d\n", si);
+        if (si & (si - 1)) die("FOOP");
+        unsigned int *v_ptr = my_ticket.vals;
+        while (si >>= 1) v_ptr++;
+        p2aac *= *v_ptr;
+    }
+    printf("P@A: %d\n", p2aac);
+/*
+    for (int ty = 0; ty < type_cnt; ty++) {
+        int v = ttypes[ty].col_field;
+        if (!(v & (v - 1))) printf("FOLD: %d\n", ty);
+    }
+*/
+    // p2 calculation
+    if (!check_idx(COL_FIELD_DEF, 0)) die("p2 fail");
+    printf("P2: %d\n", p2_acc);
     return 0;
 }
