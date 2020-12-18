@@ -1,88 +1,101 @@
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 use std::mem::swap;
+use std::hash::Hash;
 
 const INPUT: &str = include_str!("../test.txt");
 
-fn get_neighbor_pos_list(x: isize, y: isize, z: isize) -> impl 'static + Iterator<Item = (isize, isize, isize)> {
-    (-1..=1)
-        .into_iter()
-        .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v, vv)))
-        .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v.0, v.1, vv)))
-        .filter(|v| (v.0.clone() != 0) || (v.1.clone() != 0) || (v.2.clone() != 0))
-        .map(move |v| (x + v.0, y + v.1, z + v.2))
+trait Coord: Copy + Eq + Hash {
+    fn get_all_neighbors(self) -> Box<dyn 'static + Iterator<Item=Self>>;
+    fn get_filled_neighbors<'a>(self, e: &'a Environ<Self>) -> Box<dyn 'a + Iterator<Item=Self>> {
+        Box::new(self.get_all_neighbors().filter(move |v| e.is_occupied(v)))
+    }
+    fn get_neighbor_cnt(self, e: &Environ<Self>) -> u32 {
+        self.get_filled_neighbors(e).count() as u32
+    }
 }
 
-fn get_neighbors<'a>(hs: &'a HashSet<(isize, isize, isize)>, x: isize, y: isize, z: isize) -> impl 'a + Iterator<Item = (isize, isize, isize)> {
-    get_neighbor_pos_list(x, y, z).filter(move |v| hs.contains(v))
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+struct Coord3 {
+    x: isize,
+    y: isize,
+    z: isize,
 }
 
-fn get_neighbors_cnt(hs: &HashSet<(isize, isize, isize)>, x: isize, y: isize, z: isize) -> u32 {
-    get_neighbors(hs, x, y, z).count() as u32
+impl Coord for Coord3 {
+    fn get_all_neighbors(self) -> Box<dyn 'static + Iterator<Item=Self>> {
+        Box::new((-1..=1)
+            .into_iter()
+            .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v, vv)))
+            .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v.0, v.1, vv)))
+            .filter(|v| (v.0.clone() != 0) || (v.1.clone() != 0) || (v.2.clone() != 0))
+            .map(move |v| Coord3 {x: self.x + v.0, y: self.y + v.1, z: self.z + v.2}))
+    }
 }
 
-fn step(hs: &HashSet<(isize, isize, isize)>) -> HashSet<(isize, isize, isize)> {
-    let mut adj_cnts = HashMap::new();
-    hs.iter().cloned().flat_map(|v| get_neighbor_pos_list(v.0, v.1, v.2)).for_each(|ent| {
-        match adj_cnts.entry(ent) {
-            Entry::Vacant(v) => {
-                v.insert(1);
-            },
-            Entry::Occupied(o) => {
-                *o.into_mut() += 1;
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+struct Coord4 {
+    x: isize,
+    y: isize,
+    z: isize,
+    w: isize,
+}
+
+impl Coord for Coord4 {
+    fn get_all_neighbors(self) -> Box<dyn Iterator<Item=Self>> {
+        Box::new((-1..=1)
+            .into_iter()
+            .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v, vv)))
+            .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v.0, v.1, vv)))
+            .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v.0, v.1, v.2, vv)))
+            .filter(|v| (v.0.clone() != 0) || (v.1.clone() != 0) || (v.2.clone() != 0) || (v.3.clone() != 0))
+            .map(move |v| Coord4 {x: self.x + v.0, y: self.y + v.1, z: self.z + v.2, w: self.w + v.3}))
+    }
+}
+
+struct Environ<C: Coord> {
+    data: HashSet<C>
+}
+
+impl<C: Coord> Environ<C> {
+    fn is_occupied(&self, pos: &C) -> bool {
+        self.data.contains(pos)
+    }
+
+    fn step(&mut self) {
+        let mut adj_cnts = HashMap::new();
+        self.data.iter().cloned().flat_map(|v| v.get_all_neighbors()).for_each(|ent| {
+            match adj_cnts.entry(ent) {
+                Entry::Vacant(v) => {
+                    v.insert(1);
+                }
+                Entry::Occupied(o) => {
+                    *o.into_mut() += 1;
+                }
+            };
+        });
+        let mut ret = HashSet::new();
+        for cnt in adj_cnts {
+            if (cnt.1 == 3) || ((cnt.1 == 2) && self.data.contains(&cnt.0)) {
+                ret.insert(cnt.0);
             }
-        };
-    });
-    let mut ret = HashSet::new();
-    for cnt in adj_cnts {
-        if (cnt.1 == 3) || ((cnt.1 == 2) && hs.contains(&cnt.0)) {
-            ret.insert(cnt.0);
+        }
+        swap(&mut self.data, &mut ret)
+    }
+
+    fn new(h: HashSet<C>) -> Self {
+        Environ {
+            data: h
         }
     }
-    ret
-}
 
-fn get_neighbor_pos_list_4(x: isize, y: isize, z: isize, w: isize) -> impl 'static + Iterator<Item = (isize, isize, isize, isize)> {
-    (-1..=1)
-        .into_iter()
-        .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v, vv)))
-        .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v.0, v.1, vv)))
-        .flat_map(|v| (-1..=1).into_iter().map(move |vv| (v.0, v.1, v.2, vv)))
-        .filter(|v| (v.0.clone() != 0) || (v.1.clone() != 0) || (v.2.clone() != 0) || (v.3.clone() != 0))
-        .map(move |v| (x + v.0, y + v.1, z + v.2, w + v.3))
-}
-
-fn get_neighbors_4<'a>(hs: &'a HashSet<(isize, isize, isize, isize)>, x: isize, y: isize, z: isize, w: isize) -> impl 'a + Iterator<Item = (isize, isize, isize, isize)> {
-    get_neighbor_pos_list_4(x, y, z, w).filter(move |v| hs.contains(v))
-}
-
-fn get_neighbors_cnt_4(hs: &HashSet<(isize, isize, isize, isize)>, x: isize, y: isize, z: isize, w: isize) -> u32 {
-    get_neighbors_4(hs, x, y, z, w).count() as u32
-}
-
-fn step_4(hs: &HashSet<(isize, isize, isize, isize)>) -> HashSet<(isize, isize, isize, isize)> {
-    let mut adj_cnts = HashMap::new();
-    hs.iter().cloned().flat_map(|v| get_neighbor_pos_list_4(v.0, v.1, v.2, v.3)).for_each(|ent| {
-        match adj_cnts.entry(ent) {
-            Entry::Vacant(v) => {
-                v.insert(1);
-            },
-            Entry::Occupied(o) => {
-                *o.into_mut() += 1;
-            }
-        };
-    });
-    let mut ret = HashSet::new();
-    for cnt in adj_cnts {
-        if (cnt.1 == 3) || ((cnt.1 == 2) && hs.contains(&cnt.0)) {
-            ret.insert(cnt.0);
-        }
+    fn count(self) -> u32 {
+        self.data.len() as u32
     }
-    ret
 }
 
 fn main() {
-    let mut hset = HashSet::new();
+    let mut p1_set = HashSet::new();
     INPUT.split('\n')
         .enumerate()
         .flat_map(|v| v.1
@@ -90,19 +103,23 @@ fn main() {
             .enumerate()
             .map(move |vv| (vv.0 as isize, v.0 as isize, vv.1))
         )
-        .filter_map(|v| if v.2 == '#' {Some((v.0, v.1, 0isize))} else {None})
+        .filter_map(|v| if v.2 == '#' { Some((v.0, v.1, 0isize)) } else { None })
         .for_each(|v| {
-            hset.insert(v);
+            p1_set.insert(Coord3 { x: v.0, y: v.1, z: v.2 });
         });
-    let mut p2_hset = hset.iter().cloned().map(|v| (v.0, v.1, v.2, 0)).collect();
+    let mut p2_set = p1_set
+        .iter()
+        .cloned()
+        .map(|v| Coord4 {x: v.x, y: v.y, z: v.z, w: 0})
+        .collect();
+    let mut p1_env = Environ::new(p1_set);
     for _ in 0..6 {
-        let mut nhset = step(&hset);
-        swap(&mut hset, &mut nhset);
+        p1_env.step();
     }
-    println!("P1: {}", hset.into_iter().count());
+    println!("P1: {}", p1_env.count());
+    let mut p2_env = Environ::new(p2_set);
     for _ in 0..6 {
-        let mut nhset = step_4(&p2_hset);
-        swap(&mut p2_hset, &mut nhset);
+        p2_env.step();
     }
-    println!("P2: {}", p2_hset.into_iter().count());
+    println!("P2: {}", p2_env.count());
 }
