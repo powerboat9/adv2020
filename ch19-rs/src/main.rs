@@ -1,231 +1,140 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry;
+use std::iter::{FromIterator, once};
 use std::mem::swap;
 use std::rc::Rc;
 use std::sync::Once;
-use std::iter::{once, FromIterator};
+use std::ops::Range;
 
 const INPUT: &str = include_str!("../test.txt");
 
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 enum MatchEntry {
     Id(u32),
-    OptId(u32),
     A,
     B,
 }
 
-struct Match {
-    subs: Vec<Vec<MatchEntry>>
-}
-
-#[derive(Clone)]
-enum NodeEntry {
-    A,
-    B,
-    Node(Box<Node>),
-    OptNode(Box<Node>)
-}
-
-#[derive(Clone)]
-enum Node {
-    Or(Vec<NodeEntry>),
-    And(Vec<NodeEntry>),
-}
-
-fn matches_to_node(hs: &HashMap<u32, Match>) -> Node {
-    matches_to_node_r(hs, 0, &mut HashMap::new())
-}
-
-fn matches_to_node_r(hs: &HashMap<u32, Match>, idx: u32, cache: &mut HashMap<u32, Node>) -> Node {
-    match cache.get(&idx) {
-        Some(n) => n.clone(),
-        None => {
-            let or_ls = hs
-                .get(&idx).unwrap()
-                .subs.iter()
-                .map(|and_ls| {
-                    let mut new_ls = and_ls.iter().map(|ent| {
-                        match ent {
-                            MatchEntry::A => NodeEntry::A,
-                            MatchEntry::B => NodeEntry::B,
-                            MatchEntry::Id(n) => NodeEntry::Node(Box::new(matches_to_node_r(hs, *n, cache))),
-                            MatchEntry::OptId(n) => NodeEntry::OptNode(Box::new(matches_to_node_r(hs, *n, cache)))
-                        }
-                    }).collect();
-                    NodeEntry::Node(Box::new(Node::And(new_ls)))
-                })
-                .collect();
-            let ret = Node::Or(or_ls);
-            cache.insert(idx, ret.clone());
-            ret
-        }
-    }
-}
-
-#[derive(Clone)]
-struct NFANode {
-    a: HashSet<u32>,
-    b: HashSet<u32>,
-    can_end: bool
-}
-
-#[derive(Clone)]
-struct NFA {
-    nodes: Vec<NFANode>
-}
-
-impl NFA {
-    fn check_match(&self, s: &str) -> bool {
-        let mut poses = HashSet::new();
-        poses.insert(0);
-        for c in s.chars() {
-            poses = match c {
-                'a' => poses
-                    .iter()
-                    .flat_map(|v| {
-                        self.nodes.get(*v as usize).unwrap().a.iter().copied()
-                    })
-                    .collect(),
-                'b' => poses
-                    .iter()
-                    .flat_map(|v| {
-                        self.nodes.get(*v as usize).unwrap().b.iter().copied()
-                    })
-                    .collect(),
-                _ => panic!("unexpected char")
-            };
-            if poses.len() == 0 {
-                return false
-            }
-        }
-        poses.iter().any(|&v| self.nodes.get(v as usize).unwrap().can_end)
-    }
-}
-
-fn nfa_parallel(a: &NFA, b: &NFA) -> NFA {
-    let mut ret = Vec::new();
-    let offset = (a.nodes.len() - 1) as u32;
-    let first_a = a.nodes.first().unwrap();
-    let first_b = b.nodes.first().unwrap();
-    ret.push(NFANode {
-        a: first_a.a.iter().copied().chain(first_b.a.iter().map(|v| *v + offset)).collect(),
-        b: first_a.b.iter().copied().chain(first_b.b.iter().map(|v| *v + offset)).collect(),
-        can_end: first_a.can_end || first_b.can_end
-    });
-    ret.extend(a.nodes.iter().skip(1).cloned().chain(b.nodes.iter().skip(1).map(|v| {
-        NFANode {
-            a: v.a.iter().map(|j| *j + offset).collect(),
-            b: v.b.iter().map(|j| *j + offset).collect(),
-            can_end: v.can_end
-        }
-    })));
-    NFA {
-        nodes: ret
-    }
-}
-
-fn nfa_serial(a: &NFA, b: &NFA) -> NFA {
-    let mut ret = Vec::new();
-    let offset = (a.nodes.len() - 1) as u32;
-    let first_b = b.nodes.first().unwrap();
-    ret.extend(a.nodes.iter().map(|v| {
-        if v.can_end {
-            NFANode {
-                a: v.a.iter().copied().chain(first_b.a.iter().map(|v| *v + offset)).collect(),
-                b: v.b.iter().copied().chain(first_b.b.iter().map(|v| *v + offset)).collect(),
-                can_end: first_b.can_end
-            }
+impl MatchEntry {
+    fn unwrap_id(&self) -> u32 {
+        if let MatchEntry::Id(i) = self {
+            *i
         } else {
-            v.clone()
-        }
-    }).chain(b.nodes.iter().skip(1).map(|v| {
-        NFANode {
-            a: v.a.iter().map(|j| *j + offset).collect(),
-            b: v.b.iter().map(|j| *j + offset).collect(),
-            can_end: v.can_end
-        }
-    })));
-    NFA {
-        nodes: ret
-    }
-}
-
-fn node_to_nfa(node: &Node) -> NFA {
-    match node {
-        Node::Or(ls) => {
-            let mut it = ls.iter().map(node_ent_to_nfa);
-            let mut acc = it.next().unwrap();
-            for v in it {
-                acc = nfa_parallel(&acc, &v);
-            }
-            acc
-        },
-        Node::And(ls) => {
-            let mut it = ls.iter().map(node_ent_to_nfa);
-            let mut acc = it.next().unwrap();
-            for v in it {
-                acc = nfa_serial(&acc, &v);
-            }
-            acc
+            panic!("could not unwrap id")
         }
     }
 }
 
-fn node_ent_to_nfa(node_ent: &NodeEntry) -> NFA {
-    match node_ent {
-        NodeEntry::A => {
-            NFA {
-                nodes: vec![
-                    NFANode {
-                        a: HashSet::from_iter(once(1)),
-                        b: HashSet::from_iter(once(2)),
-                        can_end: false
-                    },
-                    NFANode {
-                        a: HashSet::from_iter(once(2)),
-                        b: HashSet::from_iter(once(2)),
-                        can_end: true
-                    },
-                    NFANode {
-                        a: HashSet::from_iter(once(2)),
-                        b: HashSet::from_iter(once(2)),
-                        can_end: false
-                    }
-                ]
+#[derive(Clone)]
+struct Match {
+    pattern: Vec<MatchEntry>,
+    result: u32,
+}
+
+#[derive(Copy, Clone)]
+enum CNFPattern {
+    A,
+    B,
+    Pair(u32, u32)
+}
+
+fn to_cnf(m_in: &[Match]) -> HashMap<u32, Vec<CNFPattern>> {
+    // START, TERM, and DEL are already done
+    // do BIN and UNIT
+    let mut next_id = m_in.iter().map(|v| v.result).max().unwrap() + 1;
+    let mut to_sub = Vec::new();
+    let mut pairs = Vec::new();
+    for m in m_in {
+        match m.pattern.len() {
+            0 => unreachable!(),
+            1 => {
+                match m.pattern[0] {
+                    MatchEntry::Id(id) => to_sub.push((id, m.result)),
+                    MatchEntry::A => pairs.push((m.result, CNFPattern::A)),
+                    MatchEntry::B => pairs.push((m.result, CNFPattern::B))
+                }
+            },
+            2 => {
+                pairs.push((m.result, CNFPattern::Pair(m.pattern[0].unwrap_id(), m.pattern[1].unwrap_id())));
+            },
+            _ => {
+                let mut publish = m.result;
+                for i in 2..m.pattern.len() {
+                    pairs.push((publish, CNFPattern::Pair(next_id, m.pattern[m.pattern.len() - i + 1].unwrap_id())));
+                    publish = next_id;
+                    next_id += 1;
+                }
+                pairs.push((publish, CNFPattern::Pair(m.pattern[0].unwrap_id(), m.pattern[1].unwrap_id())));
             }
-        },
-        NodeEntry::B => {
-            NFA {
-                nodes: vec![
-                    NFANode {
-                        a: HashSet::from_iter(once(2)),
-                        b: HashSet::from_iter(once(1)),
-                        can_end: false
-                    },
-                    NFANode {
-                        a: HashSet::from_iter(once(2)),
-                        b: HashSet::from_iter(once(2)),
-                        can_end: true
-                    },
-                    NFANode {
-                        a: HashSet::from_iter(once(2)),
-                        b: HashSet::from_iter(once(2)),
-                        can_end: false
-                    }
-                ]
-            }
-        },
-        NodeEntry::Node(n) => node_to_nfa(&*n),
-        NodeEntry::OptNode(n) => {
-            let mut ret = node_to_nfa(&*n);
-            ret.nodes[0].can_end = true;
-            ret
         }
     }
+    to_sub.retain(|&(a, b)| a != b);
+    let mut has_change = true;
+    while has_change {
+        has_change = false;
+        for i in 0..to_sub.len() {
+            for j in 0..to_sub.len() {
+                if i == j {
+                    continue;
+                }
+                if to_sub[i].1 == to_sub[j].0 {
+                    to_sub[i].1 = to_sub[j].1;
+                    has_change = true;
+                }
+            }
+        }
+    }
+    let to_sub = to_sub.into_iter().collect::<HashMap<_, _>>();
+    let mut ret = HashMap::new();
+    pairs.into_iter().flat_map(|v| {
+        let second = to_sub.get(&v.0).map(|vv| (*vv, v.1));
+        once(v).chain(second.into_iter())
+    }).for_each(|v| {
+        ret.entry(v.0).or_insert_with(Vec::new).push(v.1)
+    });
+    ret
+}
+
+fn is_match_r<'a>(exp: &HashMap<u32, Vec<CNFPattern>>, id: u32, s: &'a str, cache: &mut HashMap<(&'a str, u32), bool>) -> bool {
+    if let Some(ret) = cache.get(&(s, id)).copied() {
+        return ret;
+    }
+    for pat in exp.get(&id).unwrap().iter() {
+        match pat {
+            CNFPattern::A => {
+                if s == "a" {
+                    cache.insert((s, id), true);
+                    return true;
+                }
+            },
+            CNFPattern::B => {
+                if s == "b" {
+                    cache.insert((s, id), true);
+                    return true;
+                }
+            },
+            CNFPattern::Pair(a, b) => {
+                for i in 1..s.len() {
+                    let split = s.split_at(i);
+                    if is_match_r(exp, *a, split.0, cache) && is_match_r(exp, *b, split.1, cache) {
+                        cache.insert((s, id), true);
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    cache.insert((s, id), false);
+    return false;
+}
+
+fn is_match(exp: &HashMap<u32, Vec<CNFPattern>>, s: &str) -> bool {
+    is_match_r(exp, 0, s, &mut HashMap::new())
 }
 
 fn main() {
-    let mut matches_list = HashMap::new();
+    let mut matches_list = Vec::new();
     let mut lines = INPUT.lines();
     loop {
         let line = lines.next().unwrap();
@@ -252,23 +161,34 @@ fn main() {
                 ands.push(MatchEntry::Id(tk.parse().unwrap()));
             }
         }
-        ors.push(ands);
-        matches_list.insert(id, Match {
-            subs: ors
-        });
+        for ent in ors.into_iter().chain(once(ands)) {
+            matches_list.push(Match {
+                pattern: ent,
+                result: id,
+            });
+        }
     }
-    let node_root = matches_to_node(&matches_list);
-    let nfa_root = node_to_nfa(&node_root);
-    // p1
+    // p1 and p2
+    let p1_map = to_cnf(matches_list.as_slice());
+    matches_list.push(Match {
+        pattern: vec![MatchEntry::Id(42), MatchEntry::Id(8)],
+        result: 8
+    });
+    matches_list.push(Match {
+        pattern: vec![MatchEntry::Id(42), MatchEntry::Id(11), MatchEntry::Id(31)],
+        result: 11
+    });
+    let p2_map = to_cnf(matches_list.as_slice());
     let mut p1_acc = 0;
+    let mut p2_acc = 0;
     for line in lines {
-        if nfa_root.check_match(line) {
+        if is_match(&p1_map, line) {
             p1_acc += 1;
+        }
+        if is_match(&p2_map, line) {
+            p2_acc += 1;
         }
     }
     println!("P1: {}", p1_acc);
-    // p2
-    *matches_list.get_mut(&8) = Match {
-        subs: vec![vec![42], vec![42, 8]]
-    }
+    println!("P2: {}", p2_acc);
 }

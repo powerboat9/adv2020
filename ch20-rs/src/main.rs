@@ -3,7 +3,123 @@ use std::iter::once;
 use std::collections::hash_map::Entry;
 use std::fmt::{Display, Formatter, Write};
 
-const DATA: &'static str = include_str!("../test.txt");
+//const DATA: &'static str = include_str!("../test.txt");
+
+const DATA: &'static str = "Tile 2311:
+..##.#..#.
+##..#.....
+#...##..#.
+####.#...#
+##.##.###.
+##...#.###
+.#.#.#..##
+..#....#..
+###...#.#.
+..###..###
+
+Tile 1951:
+#.##...##.
+#.####...#
+.....#..##
+#...######
+.##.#....#
+.###.#####
+###.##.##.
+.###....#.
+..#.#..#.#
+#...##.#..
+
+Tile 1171:
+####...##.
+#..##.#..#
+##.#..#.#.
+.###.####.
+..###.####
+.##....##.
+.#...####.
+#.##.####.
+####..#...
+.....##...
+
+Tile 1427:
+###.##.#..
+.#..#.##..
+.#.##.#..#
+#.#.#.##.#
+....#...##
+...##..##.
+...#.#####
+.#.####.#.
+..#..###.#
+..##.#..#.
+
+Tile 1489:
+##.#.#....
+..##...#..
+.##..##...
+..#...#...
+#####...#.
+#..#.#.#.#
+...#.#.#..
+##.#...##.
+..##.##.##
+###.##.#..
+
+Tile 2473:
+#....####.
+#..#.##...
+#.##..#...
+######.#.#
+.#...#.#.#
+.#########
+.###.#..#.
+########.#
+##...##.#.
+..###.#.#.
+
+Tile 2971:
+..#.#....#
+#...###...
+#.#.###...
+##.##..#..
+.#####..##
+.#..####.#
+#..#.#..#.
+..####.###
+..#.#.###.
+...#.#.#.#
+
+Tile 2729:
+...#.#.#.#
+####.#....
+..#.#.....
+....#..#.#
+.##..##.#.
+.#.####...
+####.#.#..
+##.####...
+##..#.##..
+#.##...##.
+
+Tile 3079:
+#.#.#####.
+.#..######
+..#.......
+######....
+####.#..#.
+.#...#.##.
+#.#####.##
+..#.###...
+..#.......
+..#.###...";
+
+fn to_once<T>(mut i: impl Iterator<Item = T>) -> T {
+    let v = i.next().expect("expected one item");
+    if i.next().is_some() {
+        panic!("expected only one item");
+    }
+    v
+}
 
 #[derive(Copy, Clone)]
 struct Tile {
@@ -60,6 +176,16 @@ impl Display for Tile {
             }
         }
         Ok(())
+    }
+}
+
+fn orient_tiles_r(side_len: usize, to_place: &mut Vec<Tile>, placed: &mut Vec<Tile>) -> bool {
+    if to_place.len() == 0 {
+        return true
+    }
+    for i in 0..to_place.len() {
+        let tile = to_place[i];
+
     }
 }
 
@@ -181,7 +307,24 @@ fn main() {
     }
     println!("OK");
     */
-    println!("T0:\n{}", tiles[0]);
+    let mut edge_map = HashMap::new();
+    for t in tiles.iter() {
+        let edges = t.edges();
+        for edge in edges.iter().enumerate() {
+            match edge_map.entry(*edge.1) {
+                Entry::Occupied(mut o) => {
+                    *o.get_mut() += 1;
+                },
+                Entry::Vacant(v) => {
+                    v.insert(1);
+                }
+            }
+        }
+    }
+    if edge_map.iter().any(|(_, &n)| n > 2) {
+        panic!("multiple edges")
+    }
+    println!("ID:{}\n{}", tiles[0].idx, tiles[0]);
     for e in tiles[0].edges().iter().enumerate() {
         print!("R{}: ", e.0);
         for b in e.1 {
@@ -191,26 +334,21 @@ fn main() {
                 '.'
             });
         }
-        println!();
-    }
-    let mut edge_map = HashMap::new();
-    for t in tiles.iter() {
-        let edges = t.edges();
-        for edge in edges.iter().enumerate() {
-            match edge_map.entry(*edge.1) {
-                Entry::Occupied(o) => {
-                    o.remove();
-                },
-                Entry::Vacant(v) => {
-                    v.insert(());
-                }
-            }
-        }
+        println!("    {}", *edge_map.get(e.1).unwrap());
     }
     let p1 = tiles
         .iter()
         .filter_map(|t| {
-            if t.edges().iter().filter(|e| edge_map.get(*e).is_some()).count() == 2 {
+            let m_cnt = t.edges()
+                .iter()
+                .filter(|e| {
+                    *edge_map.get(*e).unwrap() == 2
+                }).count();
+            println!(">> {}: {}", t.idx, m_cnt);
+            if m_cnt > 4 {
+                println!("TILE: {}", t.idx);
+                panic!("fail att");
+            } else if m_cnt == 2 {
                 println!("TIE");
                 Some(t.idx)
             } else {
