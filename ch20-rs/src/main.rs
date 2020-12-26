@@ -1,127 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 use std::iter::once;
 
 const DATA: &'static str = include_str!("../test.txt");
-/*
-const DATA: &'static str = "Tile 2311:
-..##.#..#.
-##..#.....
-#...##..#.
-####.#...#
-##.##.###.
-##...#.###
-.#.#.#..##
-..#....#..
-###...#.#.
-..###..###
-
-Tile 1951:
-#.##...##.
-#.####...#
-.....#..##
-#...######
-.##.#....#
-.###.#####
-###.##.##.
-.###....#.
-..#.#..#.#
-#...##.#..
-
-Tile 1171:
-####...##.
-#..##.#..#
-##.#..#.#.
-.###.####.
-..###.####
-.##....##.
-.#...####.
-#.##.####.
-####..#...
-.....##...
-
-Tile 1427:
-###.##.#..
-.#..#.##..
-.#.##.#..#
-#.#.#.##.#
-....#...##
-...##..##.
-...#.#####
-.#.####.#.
-..#..###.#
-..##.#..#.
-
-Tile 1489:
-##.#.#....
-..##...#..
-.##..##...
-..#...#...
-#####...#.
-#..#.#.#.#
-...#.#.#..
-##.#...##.
-..##.##.##
-###.##.#..
-
-Tile 2473:
-#....####.
-#..#.##...
-#.##..#...
-######.#.#
-.#...#.#.#
-.#########
-.###.#..#.
-########.#
-##...##.#.
-..###.#.#.
-
-Tile 2971:
-..#.#....#
-#...###...
-#.#.###...
-##.##..#..
-.#####..##
-.#..####.#
-#..#.#..#.
-..####.###
-..#.#.###.
-...#.#.#.#
-
-Tile 2729:
-...#.#.#.#
-####.#....
-..#.#.....
-....#..#.#
-.##..##.#.
-.#.####...
-####.#.#..
-##.####...
-##..#.##..
-#.##...##.
-
-Tile 3079:
-#.#.#####.
-.#..######
-..#.......
-######....
-####.#..#.
-.#...#.##.
-#.#####.##
-..#.###...
-..#.......
-..#.###...";
-
- */
-
-fn to_once<T>(mut i: impl Iterator<Item=T>) -> T {
-    let v = i.next().expect("expected one item");
-    if i.next().is_some() {
-        panic!("expected only one item");
-    }
-    v
-}
 
 #[derive(Copy, Clone)]
 struct Tile {
@@ -165,43 +46,6 @@ impl Tile {
             idx: self.idx,
             tiles,
         }
-    }
-
-    fn edges(&self) -> [[bool; 10]; 8] {
-        let mut ret = [[false; 10]; 8];
-        for x in 0..10 {
-            ret[0][x] = self.tiles[0][x];
-            ret[2][9 - x] = self.tiles[9][x];
-        }
-        for y in 0..10 {
-            ret[1][y] = self.tiles[y][9];
-            ret[3][9 - y] = self.tiles[y][0];
-        }
-        // handles flips
-        for i in 0..4 {
-            for j in 0..10 {
-                ret[i + 4][9 - j] = ret[i][j];
-            }
-        }
-        ret
-    }
-}
-
-impl Display for Tile {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for i in 0..10 {
-            for j in 0..10 {
-                f.write_char(if self.tiles[i][j] {
-                    '#'
-                } else {
-                    '.'
-                })?;
-            }
-            if i != 9 {
-                f.write_char('\n')?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -321,51 +165,6 @@ impl TileEnv {
     }
 }
 
-impl Display for TileEnv {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let max_x = self.tiles.iter().map(|(&v, _)| v.0).max().unwrap();
-        let max_y = self.tiles.iter().map(|(&v, _)| v.1).max().unwrap();
-        let min_x = self.tiles.iter().map(|(&v, _)| v.0).min().unwrap();
-        let min_y = self.tiles.iter().map(|(&v, _)| v.1).min().unwrap();
-        for row_n in min_y..=max_y {
-            if row_n != min_y {
-                println!();
-            }
-            let mut row = vec![None; (max_x - min_x + 1) as usize];
-            for tile in self.tiles.iter().filter_map(|(&(x, y), t)| {
-                if y == row_n {
-                    Some((x - min_x, t))
-                } else {
-                    None
-                }
-            }) {
-                row[tile.0 as usize] = Some(tile.1);
-            }
-            for i in 0..10 {
-                for col in row.iter().enumerate() {
-                    if col.0 != 0 {
-                        print!(" ");
-                    }
-                    match col.1 {
-                        None => print!("          "),
-                        Some(v) => {
-                            for j in 0..10 {
-                                if v.tiles[i][j] {
-                                    print!("#");
-                                } else {
-                                    print!(".");
-                                }
-                            }
-                        }
-                    }
-                }
-                println!();
-            }
-        }
-        Ok(())
-    }
-}
-
 struct TileMatrix {
     inner: Vec<bool>,
     side_len: usize,
@@ -426,15 +225,6 @@ impl TileMatrix {
             |s, x, y| s.inner[y + x * s.side_len]
         ];
         for f in AS_FUNCTIONS.iter() {
-            print!(">> ");
-            for x in 0..self.side_len {
-                print!("{}", if (f)(self, x, 0) {
-                    '#'
-                } else {
-                    '.'
-                });
-            }
-            println!();
             let mut cnt = 0;
             for y in 0..(self.side_len - (HEIGHT - 1)) {
                 for x in 0..(self.side_len - (WIDTH - 1)) {
@@ -456,24 +246,6 @@ impl TileMatrix {
             }
         }
         panic!("failed to find monsters")
-    }
-}
-
-impl Display for TileMatrix {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for x in 0..self.side_len {
-            if x != 0 {
-                f.write_char('\n')?;
-            }
-            for y in 0..self.side_len {
-                f.write_char(if self.inner[y * self.side_len + x] {
-                    '#'
-                } else {
-                    '.'
-                })?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -506,9 +278,7 @@ fn main() {
         .iter()
         .map(|coord| env.tiles.get(coord).unwrap().idx as u64)
         .fold(1, |a, b| a * b);
-    println!("{}", &env);
     println!("P1: {}", p1);
     let mat = TileMatrix::from_env(env);
-    println!("{}", &mat);
     println!("P2: {}", mat.count_filled() - mat.search_sea() * 15);
 }
